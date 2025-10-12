@@ -77,7 +77,7 @@ impl Report {
             reused_count,
         }
     }
-    
+
     pub async fn find_by_user_personal(user_uuid: &UserId, conn: &mut DbConn) -> Option<Self> {
         db_run! { conn: {
             reports::table
@@ -88,7 +88,7 @@ impl Report {
                 .from_db()
         }}
     }
-    
+
     pub async fn find_by_org(org_uuid: &OrganizationId, conn: &mut DbConn) -> Option<Self> {
         db_run! { conn: {
             reports::table
@@ -99,14 +99,14 @@ impl Report {
                 .from_db()
         }}
     }
-    
+
     pub fn update_counts(&mut self, exposed_count: i32, weak_count: i32, reused_count: i32) {
         self.exposed_count = if exposed_count < 0 { 0 } else { exposed_count };
         self.weak_count = if weak_count < 0 { 0 } else { weak_count };
         self.reused_count = if reused_count < 0 { 0 } else { reused_count };
         self.last_updated_at = Utc::now().naive_utc();
     }
-    
+
     pub async fn save(&mut self, conn: &mut DbConn) -> EmptyResult {
         db_run! { conn:
             sqlite, mysql {
@@ -132,4 +132,3 @@ impl Report {
         }
     }
 }
-

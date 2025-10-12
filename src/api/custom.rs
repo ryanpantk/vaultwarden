@@ -18,7 +18,7 @@ impl<'r> FromRequest<'r> for VWApi {
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let api_key = request.headers().get_one("x-vaultwarden-api");
-        
+
         match api_key {
             Some(key) if !key.is_empty() => {
                 if let Some(expected_key) = CONFIG.x_vaultwarden_api() {
