@@ -2060,8 +2060,6 @@ async fn get_policy(org_id: OrganizationId, pol_type: i32, headers: AdminHeaders
 #[derive(Deserialize)]
 struct PolicyData {
     enabled: bool,
-    #[serde(rename = "type")]
-    _type: i32,
     data: Option<Value>,
 }
 
