@@ -12,7 +12,7 @@ mod org_policy;
 mod organization;
 mod report;
 mod send;
-mod sso_nonce;
+mod sso_auth;
 mod two_factor;
 mod two_factor_duo_context;
 mod two_factor_incomplete;
@@ -38,7 +38,7 @@ pub use self::send::{
     id::{SendFileId, SendId},
     Send, SendType,
 };
-pub use self::sso_nonce::SsoNonce;
+pub use self::sso_auth::{OIDCAuthenticatedUser, OIDCCodeWrapper, SsoAuth};
 pub use self::two_factor::{TwoFactor, TwoFactorType};
 pub use self::two_factor_duo_context::TwoFactorDuoContext;
 pub use self::two_factor_incomplete::TwoFactorIncomplete;
