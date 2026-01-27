@@ -137,11 +137,10 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
             // Get user memberships to determine status
             let memberships = Membership::find_by_user(&user_uuid, &mut conn).await;
 
-            // Status: Pending (no org), PendingSetup (no password), Active (has org and password)
-            let status = if memberships.is_empty() {
+            let status = if user.password_hash.is_empty() {
+                "PendingSetupPassword".to_string()
+            } else if memberships.is_empty() {
                 "Pending".to_string()
-            } else if user.password_hash.is_empty() {
-                "PendingSetup".to_string()
             } else {
                 "Active".to_string()
             };
