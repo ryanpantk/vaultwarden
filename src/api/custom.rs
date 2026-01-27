@@ -52,12 +52,27 @@ struct InviteResponse {
     user_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CountData {
+    #[serde(default)]
+    org: std::collections::HashMap<String, i32>,
+    #[serde(default)]
+    me: i32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ExposedData {
     user_id: String,
+    #[serde(default)]
     org: std::collections::HashMap<String, i32>,
+    #[serde(default)]
     me: i32,
+    #[serde(default)]
+    weak: Option<CountData>,
+    #[serde(default)]
+    reused: Option<CountData>,
 }
 
 #[post("/invite", format = "application/json", data = "<data>")]
@@ -92,11 +107,24 @@ async fn invite_user(_auth: VWApi, data: Json<InviteData>, mut conn: DbConn) -> 
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct MemberInfo {
+    email: String,
+    status: String,
+    exposed_count: i64,
+    weak_count: i64,
+    reused_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct UserDetailsResponse {
     status: String,
     org_id: Option<String>,
-    members_count: i64,
+    members_count: usize,
+    members: Vec<MemberInfo>,
     exposed_count: i64,
+    weak_count: i64,
+    reused_count: i64,
     last_updated_at: Option<String>,
 }
 
@@ -105,33 +133,68 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
     let user_uuid = UserId::from(user_id);
 
     match User::find_by_uuid(&user_uuid, &mut conn).await {
-        Some(_user) => {
+        Some(user) => {
             // Get user memberships to determine status
             let memberships = Membership::find_by_user(&user_uuid, &mut conn).await;
-            
-            // Status: Active if has membership, else Pending
+
+            // Status: Pending (no org), PendingSetup (no password), Active (has org and password)
             let status = if memberships.is_empty() {
                 "Pending".to_string()
+            } else if user.password_hash.is_empty() {
+                "PendingSetup".to_string()
             } else {
                 "Active".to_string()
             };
-            
-            // Members count: number of members in the user's organization (0 if no organization)
-            let members_count = if let Some(membership) = memberships.first() {
+
+            // Members: get all members of the user's organization with their emails and status
+            let (members_count, members) = if let Some(membership) = memberships.first() {
                 let org_memberships = Membership::find_by_org(&membership.org_uuid, &mut conn).await;
-                org_memberships.len() as i64
+                let members_count = org_memberships.len();
+                let mut member_list = Vec::new();
+                for m in org_memberships {
+                    // Skip owners
+                    if m.atype == MembershipType::Owner as i32 {
+                        continue;
+                    }
+                    if let Some(user) = User::find_by_uuid(&m.user_uuid, &mut conn).await {
+                        let member_status = match m.status {
+                            -1 => "Revoked",
+                            0 => "Invited",
+                            1 => "Accepted",
+                            2 => "Confirmed",
+                            _ => "Unknown",
+                        };
+                        let (exposed_count, weak_count, reused_count) = Report::find_by_user_personal(&m.user_uuid, &mut conn)
+                            .await
+                            .map(|r| (r.exposed_count as i64, r.weak_count as i64, r.reused_count as i64))
+                            .unwrap_or((0, 0, 0));
+                        member_list.push(MemberInfo {
+                            email: user.email,
+                            status: member_status.to_string(),
+                            exposed_count,
+                            weak_count,
+                            reused_count,
+                        });
+                    }
+                }
+                (members_count, member_list)
             } else {
-                0
+                (0, Vec::new())
             };
-            
-            // Exposed count and last_updated_at: search reports by org_uuid (0 if no organization)
-            let (exposed_count, last_updated_at) = if let Some(membership) = memberships.first() {
+
+            // Org counts and last_updated_at: search reports by org_uuid (0 if no organization)
+            let (exposed_count, weak_count, reused_count, last_updated_at) = if let Some(membership) = memberships.first() {
                 match Report::find_by_org(&membership.org_uuid, &mut conn).await {
-                    Some(report) => (report.exposed_count, Some(report.last_updated_at.and_utc().to_rfc3339())),
-                    None => (0, None),
+                    Some(report) => (
+                        report.exposed_count,
+                        report.weak_count,
+                        report.reused_count,
+                        Some(report.last_updated_at.and_utc().to_rfc3339()),
+                    ),
+                    None => (0, 0, 0, None),
                 }
             } else {
-                (0, None)
+                (0, 0, 0, None)
             };
 
             let org_id = memberships.first().map(|m| m.org_uuid.to_string());
@@ -140,7 +203,10 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
                 status,
                 org_id,
                 members_count,
+                members,
                 exposed_count: exposed_count.into(),
+                weak_count: weak_count.into(),
+                reused_count: reused_count.into(),
                 last_updated_at,
             }).unwrap()))
         }
@@ -151,46 +217,55 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
 #[post("/exposed", format = "application/json", data = "<data>")]
 async fn exposed(data: Json<ExposedData>, mut conn: DbConn) -> EmptyResult {
     let data: ExposedData = data.into_inner();
-    let user_uuid = UserId::from(data.user_id);
-    
+
+    let user_uuid = UserId::from(data.user_id.clone());
+
+    // Extract personal counts
+    let personal_weak = data.weak.as_ref().map(|w| w.me).unwrap_or(0);
+    let personal_reused = data.reused.as_ref().map(|r| r.me).unwrap_or(0);
+
     match User::find_by_uuid(&user_uuid, &mut conn).await {
         Some(_) => {
             // Get user's memberships once for efficiency
             let user_memberships = Membership::find_by_user(&user_uuid, &mut conn).await;
-            
-            // 1. Store personal exposed passwords (me field) - with userId, no org
+
+            // 1. Store personal counts (me field) - with userId, no org
             match Report::find_by_user_personal(&user_uuid, &mut conn).await {
                 Some(mut existing_report) => {
-                    existing_report.update_exposed_count(data.me);
+                    existing_report.update_counts(data.me, personal_weak, personal_reused);
                     existing_report.save(&mut conn).await?;
                 }
                 None => {
-                    let mut report = Report::new_personal(user_uuid.clone(), data.me);
+                    let mut report = Report::new_personal(user_uuid.clone(), data.me, personal_weak, personal_reused);
                     report.save(&mut conn).await?;
                 }
             }
-            
-            // 2. Store organization-specific exposed passwords (no userId, only orgId)
-            for (org_id_str, exposed_count) in data.org {
-                let org_uuid = OrganizationId::from(org_id_str);
-                
+
+            // 2. Store organization-specific counts (no userId, only orgId)
+            for (org_id_str, exposed_count) in &data.org {
+                let org_uuid = OrganizationId::from(org_id_str.clone());
+
                 // Verify user is member of this organization
                 let is_member = user_memberships
                     .iter()
                     .any(|membership| membership.org_uuid == org_uuid);
-                
+
                 if !is_member {
                     continue; // Skip if user is not a member of this org
                 }
-                
+
+                // Get org-specific weak and reused counts
+                let org_weak = data.weak.as_ref().and_then(|w| w.org.get(org_id_str)).copied().unwrap_or(0);
+                let org_reused = data.reused.as_ref().and_then(|r| r.org.get(org_id_str)).copied().unwrap_or(0);
+
                 // Find and update or create new report for this specific org (no userId stored)
                 match Report::find_by_org(&org_uuid, &mut conn).await {
                     Some(mut existing_report) => {
-                        existing_report.update_exposed_count(exposed_count);
+                        existing_report.update_counts(*exposed_count, org_weak, org_reused);
                         existing_report.save(&mut conn).await?;
                     }
                     None => {
-                        let mut report = Report::new_org(org_uuid, exposed_count);
+                        let mut report = Report::new_org(org_uuid, *exposed_count, org_weak, org_reused);
                         report.save(&mut conn).await?;
                     }
                 }
