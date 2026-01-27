@@ -346,6 +346,8 @@ table! {
         exposed_count -> Integer,
         created_at -> Timestamp,
         last_updated_at -> Timestamp,
+        weak_count -> Integer,
+        reused_count -> Integer,
     }
 }
 

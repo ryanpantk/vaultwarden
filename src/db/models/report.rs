@@ -23,6 +23,8 @@ db_object! {
         pub exposed_count: i32,
         pub created_at: NaiveDateTime,
         pub last_updated_at: NaiveDateTime,
+        pub weak_count: i32,
+        pub reused_count: i32,
     }
 }
 
@@ -46,9 +48,9 @@ db_object! {
 pub struct ReportId(String);
 
 impl Report {
-    pub fn new_personal(user_uuid: UserId, exposed_count: i32) -> Self {
+    pub fn new_personal(user_uuid: UserId, exposed_count: i32, weak_count: i32, reused_count: i32) -> Self {
         let now = Utc::now().naive_utc();
-        
+
         Self {
             uuid: ReportId::from(get_uuid()),
             user_uuid: Some(user_uuid),
@@ -56,12 +58,14 @@ impl Report {
             exposed_count,
             created_at: now,
             last_updated_at: now,
+            weak_count,
+            reused_count,
         }
     }
-    
-    pub fn new_org(org_uuid: OrganizationId, exposed_count: i32) -> Self {
+
+    pub fn new_org(org_uuid: OrganizationId, exposed_count: i32, weak_count: i32, reused_count: i32) -> Self {
         let now = Utc::now().naive_utc();
-        
+
         Self {
             uuid: ReportId::from(get_uuid()),
             user_uuid: None,
@@ -69,6 +73,8 @@ impl Report {
             exposed_count,
             created_at: now,
             last_updated_at: now,
+            weak_count,
+            reused_count,
         }
     }
     
@@ -94,8 +100,10 @@ impl Report {
         }}
     }
     
-    pub fn update_exposed_count(&mut self, new_count: i32) {
-        self.exposed_count = if new_count < 0 { 0 } else { new_count };
+    pub fn update_counts(&mut self, exposed_count: i32, weak_count: i32, reused_count: i32) {
+        self.exposed_count = if exposed_count < 0 { 0 } else { exposed_count };
+        self.weak_count = if weak_count < 0 { 0 } else { weak_count };
+        self.reused_count = if reused_count < 0 { 0 } else { reused_count };
         self.last_updated_at = Utc::now().naive_utc();
     }
     
