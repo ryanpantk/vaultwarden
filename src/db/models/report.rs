@@ -100,6 +100,7 @@ impl Report {
         }}
     }
 
+
     pub fn update_counts(&mut self, exposed_count: i32, weak_count: i32, reused_count: i32) {
         self.exposed_count = if exposed_count < 0 { 0 } else { exposed_count };
         self.weak_count = if weak_count < 0 { 0 } else { weak_count };
