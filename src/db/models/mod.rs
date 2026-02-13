@@ -33,7 +33,7 @@ pub use self::organization::{
     Membership, MembershipId, MembershipStatus, MembershipType, OrgApiKeyId, Organization, OrganizationApiKey,
     OrganizationId,
 };
-pub use self::report::{Report, ReportId};
+pub use self::report::Report;
 pub use self::send::{
     id::{SendFileId, SendId},
     Send, SendType,
