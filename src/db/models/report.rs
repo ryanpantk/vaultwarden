@@ -3,6 +3,7 @@ use derive_more::{AsRef, Deref, Display, From};
 use diesel::prelude::*;
 
 use super::{OrganizationId, UserId};
+use crate::db::schema::reports;
 use crate::{
     api::EmptyResult,
     db::DbConn,
@@ -11,21 +12,19 @@ use crate::{
 };
 use macros::UuidFromParam;
 
-db_object! {
-    #[derive(Identifiable, Queryable, Insertable, AsChangeset, Selectable)]
-    #[diesel(table_name = reports)]
-    #[diesel(treat_none_as_null = true)]
-    #[diesel(primary_key(uuid))]
-    pub struct Report {
-        pub uuid: ReportId,
-        pub user_uuid: Option<UserId>,
-        pub org_uuid: Option<OrganizationId>,
-        pub exposed_count: i32,
-        pub created_at: NaiveDateTime,
-        pub last_updated_at: NaiveDateTime,
-        pub weak_count: i32,
-        pub reused_count: i32,
-    }
+#[derive(Identifiable, Queryable, Insertable, AsChangeset, Selectable)]
+#[diesel(table_name = reports)]
+#[diesel(treat_none_as_null = true)]
+#[diesel(primary_key(uuid))]
+pub struct Report {
+    pub uuid: ReportId,
+    pub user_uuid: Option<UserId>,
+    pub org_uuid: Option<OrganizationId>,
+    pub exposed_count: i32,
+    pub created_at: NaiveDateTime,
+    pub last_updated_at: NaiveDateTime,
+    pub weak_count: i32,
+    pub reused_count: i32,
 }
 
 #[derive(
@@ -78,25 +77,23 @@ impl Report {
         }
     }
 
-    pub async fn find_by_user_personal(user_uuid: &UserId, conn: &mut DbConn) -> Option<Self> {
+    pub async fn find_by_user_personal(user_uuid: &UserId, conn: &DbConn) -> Option<Self> {
         db_run! { conn: {
             reports::table
                 .filter(reports::user_uuid.eq(user_uuid))
                 .filter(reports::org_uuid.is_null())
-                .first::<ReportDb>(conn)
+                .first::<Self>(conn)
                 .ok()
-                .from_db()
         }}
     }
 
-    pub async fn find_by_org(org_uuid: &OrganizationId, conn: &mut DbConn) -> Option<Self> {
+    pub async fn find_by_org(org_uuid: &OrganizationId, conn: &DbConn) -> Option<Self> {
         db_run! { conn: {
             reports::table
                 .filter(reports::user_uuid.is_null())
                 .filter(reports::org_uuid.eq(org_uuid))
-                .first::<ReportDb>(conn)
+                .first::<Self>(conn)
                 .ok()
-                .from_db()
         }}
     }
 
@@ -108,25 +105,20 @@ impl Report {
         self.last_updated_at = Utc::now().naive_utc();
     }
 
-    pub async fn save(&mut self, conn: &mut DbConn) -> EmptyResult {
+    pub async fn save(&mut self, conn: &DbConn) -> EmptyResult {
         db_run! { conn:
             sqlite, mysql {
-                let value = ReportDb::to_db(self);
-                diesel::insert_into(reports::table)
-                    .values(&value)
-                    .on_conflict(reports::uuid)
-                    .do_update()
-                    .set(&value)
+                diesel::replace_into(reports::table)
+                    .values(&*self)
                     .execute(conn)
                     .map_res("Error saving report")
             }
             postgresql {
-                let value = ReportDb::to_db(self);
                 diesel::insert_into(reports::table)
-                    .values(&value)
+                    .values(&*self)
                     .on_conflict(reports::uuid)
                     .do_update()
-                    .set(&value)
+                    .set(&*self)
                     .execute(conn)
                     .map_res("Error saving report")
             }

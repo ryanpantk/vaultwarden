@@ -91,7 +91,7 @@ async fn invite_user(_auth: VWApi, data: Json<InviteData>, mut conn: DbConn) -> 
         }).unwrap()))
     }
 
-    let mut user = User::new(data.email, None);
+    let mut user = User::new(&data.email, None);
 
     async fn _generate_invite(user: &User, conn: &mut DbConn) -> EmptyResult {
         if CONFIG.mail_enabled() {
@@ -170,7 +170,7 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
                             2 => "Confirmed",
                             _ => "Unknown",
                         };
-                        let (exposed_count, weak_count, reused_count) = Report::find_by_user_personal(&m.user_uuid, &mut conn)
+                        let (exposed_count, weak_count, reused_count) = Report::find_by_user_personal(&m.user_uuid, &conn)
                             .await
                             .map(|r| (r.exposed_count as i64, r.weak_count as i64, r.reused_count as i64))
                             .unwrap_or((0, 0, 0));
@@ -190,7 +190,7 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
 
             // Org counts and last_updated_at: search reports by org_uuid (0 if no organization)
             let (exposed_count, weak_count, reused_count, last_updated_at) = if let Some(membership) = memberships.first() {
-                match Report::find_by_org(&membership.org_uuid, &mut conn).await {
+                match Report::find_by_org(&membership.org_uuid, &conn).await {
                     Some(report) => (
                         report.exposed_count,
                         report.weak_count,
@@ -210,9 +210,9 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
                 org_id,
                 members_count,
                 members,
-                exposed_count: exposed_count.into(),
-                weak_count: weak_count.into(),
-                reused_count: reused_count.into(),
+                exposed_count: exposed_count as i64,
+                weak_count: weak_count as i64,
+                reused_count: reused_count as i64,
                 last_updated_at,
             }).unwrap()))
         }
@@ -236,14 +236,14 @@ async fn exposed(data: Json<ExposedData>, mut conn: DbConn) -> EmptyResult {
             let user_memberships = Membership::find_by_user(&user_uuid, &mut conn).await;
 
             // 1. Store personal counts (me field) - with userId, no org
-            match Report::find_by_user_personal(&user_uuid, &mut conn).await {
+            match Report::find_by_user_personal(&user_uuid, &conn).await {
                 Some(mut existing_report) => {
                     existing_report.update_counts(data.me, personal_weak, personal_reused);
-                    existing_report.save(&mut conn).await?;
+                    existing_report.save(&conn).await?;
                 }
                 None => {
                     let mut report = Report::new_personal(user_uuid.clone(), data.me, personal_weak, personal_reused);
-                    report.save(&mut conn).await?;
+                    report.save(&conn).await?;
                 }
             }
 
@@ -265,14 +265,14 @@ async fn exposed(data: Json<ExposedData>, mut conn: DbConn) -> EmptyResult {
                 let org_reused = data.reused.as_ref().and_then(|r| r.org.get(org_id_str)).copied().unwrap_or(0);
 
                 // Find and update or create new report for this specific org (no userId stored)
-                match Report::find_by_org(&org_uuid, &mut conn).await {
+                match Report::find_by_org(&org_uuid, &conn).await {
                     Some(mut existing_report) => {
                         existing_report.update_counts(*exposed_count, org_weak, org_reused);
-                        existing_report.save(&mut conn).await?;
+                        existing_report.save(&conn).await?;
                     }
                     None => {
                         let mut report = Report::new_org(org_uuid, *exposed_count, org_weak, org_reused);
-                        report.save(&mut conn).await?;
+                        report.save(&conn).await?;
                     }
                 }
             }
