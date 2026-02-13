@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     api::{EmptyResult, JsonResult},
+    auth::{encode_jwt, generate_invite_claims},
     db::{models::*, DbConn},
     mail, CONFIG,
 };
@@ -37,7 +38,7 @@ impl<'r> FromRequest<'r> for VWApi {
 }
 
 pub fn routes() -> Vec<Route> {
-    routes![invite_user, get_user_details, exposed]
+    routes![invite_user, get_user_details, exposed, get_invite_link, get_user_invite_link]
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,6 +51,12 @@ struct InviteData {
 #[serde(rename_all = "camelCase")]
 struct InviteResponse {
     user_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InviteLinkResponse {
+    invite_link: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -274,4 +281,121 @@ async fn exposed(data: Json<ExposedData>, mut conn: DbConn) -> EmptyResult {
     }
 
     Ok(())
+}
+
+#[get("/organization/<org_id>/invite-link?<email>")]
+async fn get_invite_link(_auth: VWApi, org_id: String, email: String, mut conn: DbConn) -> JsonResult {
+    let org_uuid = OrganizationId::from(org_id);
+
+    // Find the user by email
+    let user = match User::find_by_mail(&email, &mut conn).await {
+        Some(user) => user,
+        None => err_code!("User not found", Status::NotFound.code),
+    };
+
+    // Find the organization
+    let org = match Organization::find_by_uuid(&org_uuid, &mut conn).await {
+        Some(org) => org,
+        None => err_code!("Organization not found", Status::NotFound.code),
+    };
+
+    // Find the membership
+    let membership = match Membership::find_by_user_and_org(&user.uuid, &org_uuid, &mut conn).await {
+        Some(m) => m,
+        None => err_code!("User is not a member of this organization", Status::NotFound.code),
+    };
+
+    // Verify membership is in Invited status
+    if membership.status != MembershipStatus::Invited as i32 {
+        err_code!("User is not in invited status", Status::BadRequest.code);
+    }
+
+    // Generate the invite token
+    let claims = generate_invite_claims(
+        user.uuid.clone(),
+        user.email.clone(),
+        org_uuid.clone(),
+        membership.uuid.clone(),
+        membership.invited_by_email.clone(),
+    );
+    let invite_token = encode_jwt(&claims);
+
+    // Build the invite URL
+    let mut query = url::Url::parse("https://query.builder").unwrap();
+    {
+        let mut query_params = query.query_pairs_mut();
+        query_params
+            .append_pair("email", &user.email)
+            .append_pair("organizationName", &org.name)
+            .append_pair("organizationId", &org_uuid.to_string())
+            .append_pair("organizationUserId", &membership.uuid.to_string())
+            .append_pair("token", &invite_token);
+
+        if CONFIG.sso_enabled() && CONFIG.sso_only() {
+            query_params.append_pair("orgUserHasExistingUser", "false");
+            query_params.append_pair("orgSsoIdentifier", &org.name);
+        } else if user.private_key.is_some() {
+            query_params.append_pair("orgUserHasExistingUser", "true");
+        }
+    }
+
+    let query_string = query.query().unwrap_or("");
+    let invite_link = format!("{}/#/accept-organization/?{}", CONFIG.domain(), query_string);
+
+    Ok(Json(serde_json::to_value(InviteLinkResponse {
+        invite_link,
+    }).unwrap()))
+}
+
+#[get("/user/invite-link?<email>")]
+async fn get_user_invite_link(_auth: VWApi, email: String, mut conn: DbConn) -> JsonResult {
+    // Find the user by email
+    let user = match User::find_by_mail(&email, &mut conn).await {
+        Some(user) => user,
+        None => err_code!("User not found", Status::NotFound.code),
+    };
+
+    // Verify user hasn't set up password yet (still pending)
+    if !user.password_hash.is_empty() {
+        err_code!("User has already set up their account", Status::BadRequest.code);
+    }
+
+    // Generate the invite token using fake admin UUIDs (same as /invite endpoint)
+    let org_id: OrganizationId = FAKE_ADMIN_UUID.to_string().into();
+    let member_id: MembershipId = FAKE_ADMIN_UUID.to_string().into();
+
+    let claims = generate_invite_claims(
+        user.uuid.clone(),
+        user.email.clone(),
+        org_id.clone(),
+        member_id.clone(),
+        None,
+    );
+    let invite_token = encode_jwt(&claims);
+
+    // Build the invite URL
+    let org_name = CONFIG.invitation_org_name();
+    let mut query = url::Url::parse("https://query.builder").unwrap();
+    {
+        let mut query_params = query.query_pairs_mut();
+        query_params
+            .append_pair("email", &user.email)
+            .append_pair("organizationName", &org_name)
+            .append_pair("organizationId", &org_id.to_string())
+            .append_pair("organizationUserId", &member_id.to_string())
+            .append_pair("token", &invite_token);
+
+        if CONFIG.sso_enabled() && CONFIG.sso_only() {
+            query_params.append_pair("orgUserHasExistingUser", "false");
+        } else if user.private_key.is_some() {
+            query_params.append_pair("orgUserHasExistingUser", "true");
+        }
+    }
+
+    let query_string = query.query().unwrap_or("");
+    let invite_link = format!("{}/#/accept-organization/?{}", CONFIG.domain(), query_string);
+
+    Ok(Json(serde_json::to_value(InviteLinkResponse {
+        invite_link,
+    }).unwrap()))
 }
