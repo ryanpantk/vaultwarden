@@ -12,5 +12,8 @@ data
 # Environment file
 .env
 
+# TLS certs
+*.pem
+
 # Web vault
 web-vault

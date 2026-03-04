@@ -116,6 +116,7 @@ async fn invite_user(_auth: VWApi, data: Json<InviteData>, mut conn: DbConn) -> 
 #[serde(rename_all = "camelCase")]
 struct MemberInfo {
     email: String,
+    role: String,
     status: String,
     exposed_count: i64,
     weak_count: i64,
@@ -136,7 +137,7 @@ struct UserDetailsResponse {
 }
 
 #[get("/user/<user_id>/details")]
-async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> JsonResult {
+async fn get_user_details(_auth: VWApi, user_id: &str, mut conn: DbConn) -> JsonResult {
     let user_uuid = UserId::from(user_id);
 
     match User::find_by_uuid(&user_uuid, &mut conn).await {
@@ -158,11 +159,14 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
                 let members_count = org_memberships.len();
                 let mut member_list = Vec::new();
                 for m in org_memberships {
-                    // Skip owners
-                    if m.atype == MembershipType::Owner as i32 {
-                        continue;
-                    }
                     if let Some(user) = User::find_by_uuid(&m.user_uuid, &mut conn).await {
+                        let member_role = match m.atype {
+                            0 => "Owner",
+                            1 => "Admin",
+                            2 => "User",
+                            3 => "Custom",
+                            _ => "Unknown",
+                        };
                         let member_status = match m.status {
                             -1 => "Revoked",
                             0 => "Invited",
@@ -176,6 +180,7 @@ async fn get_user_details(_auth: VWApi, user_id: String, mut conn: DbConn) -> Js
                             .unwrap_or((0, 0, 0));
                         member_list.push(MemberInfo {
                             email: user.email,
+                            role: member_role.to_string(),
                             status: member_status.to_string(),
                             exposed_count,
                             weak_count,
