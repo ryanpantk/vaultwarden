@@ -327,6 +327,7 @@ pub async fn send_invite(
     send_email(&user.email, &subject, body_html, body_text).await
 }
 
+#[allow(dead_code)]
 pub async fn send_admin_invite(
     user: &User,
     org_id: OrganizationId,

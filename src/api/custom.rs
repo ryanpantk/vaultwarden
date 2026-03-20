@@ -6,7 +6,7 @@ use crate::{
     api::{EmptyResult, JsonResult},
     auth::{encode_jwt, generate_invite_claims},
     db::{models::*, DbConn},
-    mail, CONFIG,
+    CONFIG,
 };
 
 pub const FAKE_ADMIN_UUID: &str = "00000000-0000-0000-0000-000000000000";
@@ -93,18 +93,12 @@ async fn invite_user(_auth: VWApi, data: Json<InviteData>, mut conn: DbConn) -> 
 
     let mut user = User::new(&data.email, None);
 
-    async fn _generate_invite(user: &User, conn: &mut DbConn) -> EmptyResult {
-        if CONFIG.mail_enabled() {
-            let org_id: OrganizationId = FAKE_ADMIN_UUID.to_string().into();
-            let member_id: MembershipId = FAKE_ADMIN_UUID.to_string().into();
-            mail::send_admin_invite(user, org_id, member_id, &CONFIG.invitation_org_name(), None).await
-        } else {
-            let invitation = Invitation::new(&user.email);
-            invitation.save(conn).await
-        }
+    // Create invitation record without sending email.
+    // The invite link can be retrieved via GET /user/invite-link?email=<email>
+    if !CONFIG.mail_enabled() {
+        let invitation = Invitation::new(&user.email);
+        invitation.save(&mut conn).await.map_err(|e| e.with_code(Status::InternalServerError.code))?;
     }
-
-    _generate_invite(&user, &mut conn).await.map_err(|e| e.with_code(Status::InternalServerError.code))?;
     user.save(&mut conn).await.map_err(|e| e.with_code(Status::InternalServerError.code))?;
 
     Ok(Json(serde_json::to_value(InviteResponse {
