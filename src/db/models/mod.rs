@@ -10,7 +10,6 @@ mod folder;
 mod group;
 mod org_policy;
 mod organization;
-mod report;
 mod send;
 mod sso_auth;
 mod two_factor;
@@ -33,7 +32,6 @@ pub use self::organization::{
     Membership, MembershipId, MembershipStatus, MembershipType, OrgApiKeyId, Organization, OrganizationApiKey,
     OrganizationId,
 };
-pub use self::report::Report;
 pub use self::send::{
     id::{SendFileId, SendId},
     Send, SendType,

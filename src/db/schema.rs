@@ -341,19 +341,6 @@ table! {
     }
 }
 
-table! {
-    reports (uuid) {
-        uuid -> Text,
-        user_uuid -> Nullable<Text>,
-        org_uuid -> Nullable<Text>,
-        exposed_count -> Integer,
-        created_at -> Timestamp,
-        last_updated_at -> Timestamp,
-        weak_count -> Integer,
-        reused_count -> Integer,
-    }
-}
-
 joinable!(attachments -> ciphers (cipher_uuid));
 joinable!(ciphers -> organizations (organization_uuid));
 joinable!(ciphers -> users (user_uuid));
@@ -383,8 +370,6 @@ joinable!(collections_groups -> groups (groups_uuid));
 joinable!(event -> users_organizations (uuid));
 joinable!(auth_requests -> users (user_uuid));
 joinable!(sso_users -> users (user_uuid));
-joinable!(reports -> users (user_uuid));
-joinable!(reports -> organizations (org_uuid));
 
 allow_tables_to_appear_in_same_query!(
     attachments,
@@ -410,5 +395,4 @@ allow_tables_to_appear_in_same_query!(
     collections_groups,
     event,
     auth_requests,
-    reports,
 );
