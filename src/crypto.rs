@@ -55,13 +55,13 @@ pub fn encode_random_bytes<const N: usize>(e: &Encoding) -> String {
 /// Generates a random string over a specified alphabet.
 pub fn get_random_string(alphabet: &[u8], num_chars: usize) -> String {
     // Ref: https://rust-lang-nursery.github.io/rust-cookbook/algorithms/randomness.html
-    use rand::Rng;
+    use rand::RngExt;
     let mut rng = rand::rng();
 
     (0..num_chars)
         .map(|_| {
             let i = rng.random_range(0..alphabet.len());
-            alphabet[i] as char
+            char::from(alphabet[i])
         })
         .collect()
 }
@@ -112,4 +112,11 @@ pub fn generate_api_key() -> String {
 pub fn ct_eq<T: AsRef<[u8]>, U: AsRef<[u8]>>(a: T, b: U) -> bool {
     use subtle::ConstantTimeEq;
     a.as_ref().ct_eq(b.as_ref()).into()
+}
+
+//
+// SHA256
+//
+pub fn sha256_hex(data: &[u8]) -> String {
+    HEXLOWER.encode(digest::digest(&digest::SHA256, data).as_ref())
 }
