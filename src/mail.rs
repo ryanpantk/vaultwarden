@@ -317,7 +317,7 @@ pub async fn send_invite(
     };
 
     let (subject, body_html, body_text) = get_text(
-        "email/send_org_invite",
+        "email/strongkeep-custom/send_org_invite",
         json!({
             // `url.Url` would place the anchor `#` after the query parameters
             "url": format!("{}/#/accept-organization/?{query_string}", CONFIG.domain()),

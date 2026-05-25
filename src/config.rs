@@ -1724,7 +1724,7 @@ where
     reg!("email/register_verify_email", ".html");
     reg!("email/send_2fa_removed_from_org", ".html");
     reg!("email/send_emergency_access_invite", ".html");
-    reg!("email/send_org_invite", ".html");
+    reg!("email/strongkeep-custom/send_org_invite", ".html");
     reg!("email/send_single_org_removed_from_org", ".html");
     reg!("email/smtp_test", ".html");
     reg!("email/sso_change_email", ".html");
