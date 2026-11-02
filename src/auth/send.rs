@@ -72,10 +72,14 @@ impl SendTokens {
         conn: &DbConn,
     ) -> ApiResult<SendTokens> {
         let Some(send_id) = Self::as_send_id(access_id) else {
-            return Self::invalid_error(&format!("Can't convert {access_id}"), "send_id_invalid", false);
+            return Self::invalid_error(
+                &format!("Can't convert {}", access_id.escape_debug()),
+                "send_id_invalid",
+                false,
+            );
         };
 
-        let Some(mut send) = Send::find_by_uuid(&send_id, conn).await else {
+        let Some(send) = Send::find_by_uuid(&send_id, conn).await else {
             return Self::invalid_error(&format!("Can't find {send_id}"), "send_id_invalid", false);
         };
 
@@ -101,10 +105,6 @@ impl SendTokens {
                 }
                 None => return Self::expected_error("Password required", "password_hash_b64_required"),
             }
-        }
-
-        if !send.register_access(conn).await? {
-            return Self::invalid_error(&format!("Send {send_id}, max access reached"), "send_id_invalid", true);
         }
 
         Ok(Self {

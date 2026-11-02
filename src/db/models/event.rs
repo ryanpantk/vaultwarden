@@ -43,7 +43,7 @@ pub struct Event {
     pub provider_org_uuid: Option<String>,
 }
 
-// Upstream enum: https://github.com/bitwarden/server/blob/9ebe16587175b1c0e9208f84397bb75d0d595510/src/Core/AdminConsole/Enums/EventType.cs
+// Upstream enum: https://github.com/bitwarden/server/blob/v2026.6.2/src/Core/Dirt/Enums/EventType.cs
 #[derive(Debug, Copy, Clone)]
 pub enum EventType {
     // User
@@ -79,6 +79,7 @@ pub enum EventType {
     CipherSoftDeleted = 1115,
     CipherRestored = 1116,
     CipherClientToggledCardNumberVisible = 1117,
+    CipherClientHttpAuthReleased = 1133,
 
     // Collection
     CollectionCreated = 1300,
@@ -108,6 +109,12 @@ pub enum EventType {
     OrganizationUserRejectedAuthRequest = 1514,
     OrganizationUserDeleted = 1515, // Both user and organization user data were deleted
     OrganizationUserLeft = 1516,    // User voluntarily left the organization
+    // OrganizationUserAutomaticallyConfirmed = 1517,
+    // OrganizationUserSelfRevoked = 1518, // User self-revoked due to declining organization data ownership policy
+    OrganizationUserAdminResetTwoFactor = 1519,
+    OrganizationUserRevokedTwoFactorNonCompliance = 1520,
+    OrganizationUserRevokedSingleOrganizationNonCompliance = 1521,
+    OrganizationUserNotificationBannerActionClicked = 1522,
 
     // Organization
     OrganizationUpdated = 1600,
@@ -202,20 +209,23 @@ impl Event {
     /// Basic Queries
     pub async fn save(&self, conn: &DbConn) -> EmptyResult {
         db_run! { conn:
-            sqlite, mysql {
-                diesel::replace_into(event::table)
-                .values(self)
-                .execute(conn)
-                .map_res("Error saving event")
-            }
-            postgresql {
+            mysql {
                 diesel::insert_into(event::table)
-                .values(self)
-                .on_conflict(event::uuid)
-                .do_update()
-                .set(self)
-                .execute(conn)
-                .map_res("Error saving event")
+                    .values(self)
+                    .on_conflict(diesel::dsl::DuplicatedKeys)
+                    .do_update()
+                    .set(self)
+                    .execute(conn)
+                    .map_res("Error saving event")
+            }
+            postgresql, sqlite {
+                diesel::insert_into(event::table)
+                    .values(self)
+                    .on_conflict(event::uuid)
+                    .do_update()
+                    .set(self)
+                    .execute(conn)
+                    .map_res("Error saving event")
             }
         }
     }
@@ -338,17 +348,23 @@ impl Event {
     }
 
     pub async fn clean_events(conn: &DbConn) -> EmptyResult {
-        if let Some(days_to_retain) = CONFIG.events_days_retain() {
-            let dt = Utc::now().naive_utc() - TimeDelta::try_days(days_to_retain).unwrap();
-            conn.run(move |conn| {
-                diesel::delete(event::table.filter(event::event_date.lt(dt)))
-                    .execute(conn)
-                    .map_res("Error cleaning old events")
-            })
-            .await
-        } else {
-            Ok(())
-        }
+        let Some(days_to_retain) = CONFIG.events_days_retain().filter(|&d| d != 0) else {
+            return Ok(());
+        };
+
+        let Some(days_to_retain) = TimeDelta::try_days(i64::from(days_to_retain)) else {
+            err!("Unable to calculate the event retention date, check 'EVENTS_DAYS_RETAIN'")
+        };
+
+        let Some(dt) = Utc::now().naive_utc().checked_sub_signed(days_to_retain) else {
+            err!("Unable to calculate the event retention date, check 'EVENTS_DAYS_RETAIN'")
+        };
+        conn.run(move |conn| {
+            diesel::delete(event::table.filter(event::event_date.lt(dt)))
+                .execute(conn)
+                .map_res("Error cleaning old events")
+        })
+        .await
     }
 }
 
