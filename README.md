@@ -120,6 +120,23 @@ Encountered a bug or crash? Please search our issue tracker and discussions to s
 
 <br>
 
+## StrongKeep email templates
+
+The StrongKeep email overrides live in `docker/templates/email/`, using the
+upstream template names. The Debian and Alpine Docker images copy them to
+`/etc/vaultwarden/templates` and set `TEMPLATES_FOLDER` to that directory.
+This keeps the overrides available when ECS or Compose mounts `/data` and
+`/web-vault`; no S3 upload or Terraform environment change is needed for emails.
+
+Rebuild and deploy the server image to publish email changes. Rolling back the
+image also rolls back its templates. The unmodified upstream templates remain
+compiled into the binary as defaults for templates without an override.
+An explicitly supplied `TEMPLATES_FOLDER` replaces the image's default directory.
+
+For a host Rust build, set `TEMPLATES_FOLDER` to the absolute path of
+`docker/templates` to use the same branding. Existing email wording and links
+are preserved; review environment-specific links before changing them.
+
 ## Contributors
 
 Thanks for your contribution to the project!

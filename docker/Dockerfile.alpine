@@ -154,6 +154,10 @@ COPY docker/healthcheck.sh docker/start.sh /
 COPY --from=vault /web-vault ./web-vault
 COPY --from=build /app/target/final/vaultwarden .
 
+# Keep branding outside /data and /web-vault, which are mounted at runtime.
+COPY docker/templates /etc/vaultwarden/templates
+ENV TEMPLATES_FOLDER=/etc/vaultwarden/templates
+
 HEALTHCHECK --interval=60s --timeout=10s CMD ["/healthcheck.sh"]
 
 CMD ["/start.sh"]

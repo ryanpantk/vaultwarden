@@ -15,5 +15,9 @@ data
 # TLS certs
 *.pem
 
+# Local artifacts
+.DS_Store
+/docker/vaultwarden
+
 # Web vault
 web-vault

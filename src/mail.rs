@@ -326,60 +326,7 @@ pub async fn send_invite(
     };
 
     let (subject, body_html, body_text) = get_text(
-        "email/strongkeep-custom/send_org_invite",
-        json!({
-            // `url.Url` would place the anchor `#` after the query parameters
-            "url": format!("{}/#/accept-organization/?{query_string}", CONFIG.domain()),
-            "img_src": CONFIG._smtp_img_src(),
-            "org_name": org_name,
-        }),
-    )?;
-
-    send_email(&user.email, &subject, body_html, body_text).await
-}
-
-#[allow(dead_code)]
-pub async fn send_admin_invite(
-    user: &User,
-    org_id: OrganizationId,
-    member_id: MembershipId,
-    org_name: &str,
-    invited_by_email: Option<String>,
-) -> EmptyResult {
-    let claims = generate_invite_claims(
-        user.uuid.clone(),
-        user.email.clone(),
-        org_id.clone(),
-        member_id.clone(),
-        invited_by_email,
-    )?;
-    let invite_token = encode_jwt(&claims);
-    let mut query = url::Url::parse("https://query.builder").unwrap();
-    {
-        let mut query_params = query.query_pairs_mut();
-        query_params
-            .append_pair("email", &user.email)
-            .append_pair("organizationName", org_name)
-            .append_pair("organizationId", &org_id)
-            .append_pair("organizationUserId", &member_id)
-            .append_pair("token", &invite_token)
-            .append_pair("initOrganization", "false");
-
-        if CONFIG.sso_enabled() && CONFIG.sso_only() {
-            query_params.append_pair("orgUserHasExistingUser", "false");
-        } else if user.private_key.is_some() {
-            query_params.append_pair("orgUserHasExistingUser", "true");
-        } else {
-            query_params.append_pair("orgUserHasExistingUser", "false");
-        }
-    }
-
-    let Some(query_string) = query.query() else {
-        err!("Failed to build invite URL query parameters")
-    };
-
-    let (subject, body_html, body_text) = get_text(
-        "email/send_admin_invite",
+        "email/send_org_invite",
         json!({
             // `url.Url` would place the anchor `#` after the query parameters
             "url": format!("{}/#/accept-organization/?{query_string}", CONFIG.domain()),
