@@ -209,13 +209,16 @@ async fn get_invite_link(_auth: VWApi, org_id: String, email: String, mut conn: 
             .append_pair("organizationName", &org.name)
             .append_pair("organizationId", &org_uuid.to_string())
             .append_pair("organizationUserId", &membership.uuid.to_string())
-            .append_pair("token", &invite_token);
+            .append_pair("token", &invite_token)
+            .append_pair("initOrganization", "false");
 
         if CONFIG.sso_enabled() && CONFIG.sso_only() {
             query_params.append_pair("orgUserHasExistingUser", "false");
             query_params.append_pair("orgSsoIdentifier", &org.name);
         } else if user.private_key.is_some() {
             query_params.append_pair("orgUserHasExistingUser", "true");
+        } else {
+            query_params.append_pair("orgUserHasExistingUser", "false");
         }
     }
 
@@ -263,12 +266,15 @@ async fn get_user_invite_link(_auth: VWApi, email: String, mut conn: DbConn) -> 
             .append_pair("organizationName", &org_name)
             .append_pair("organizationId", &org_id.to_string())
             .append_pair("organizationUserId", &member_id.to_string())
-            .append_pair("token", &invite_token);
+            .append_pair("token", &invite_token)
+            .append_pair("initOrganization", "false");
 
         if CONFIG.sso_enabled() && CONFIG.sso_only() {
             query_params.append_pair("orgUserHasExistingUser", "false");
         } else if user.private_key.is_some() {
             query_params.append_pair("orgUserHasExistingUser", "true");
+        } else {
+            query_params.append_pair("orgUserHasExistingUser", "false");
         }
     }
 

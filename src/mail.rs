@@ -362,12 +362,15 @@ pub async fn send_admin_invite(
             .append_pair("organizationName", org_name)
             .append_pair("organizationId", &org_id)
             .append_pair("organizationUserId", &member_id)
-            .append_pair("token", &invite_token);
+            .append_pair("token", &invite_token)
+            .append_pair("initOrganization", "false");
 
         if CONFIG.sso_enabled() && CONFIG.sso_only() {
             query_params.append_pair("orgUserHasExistingUser", "false");
         } else if user.private_key.is_some() {
             query_params.append_pair("orgUserHasExistingUser", "true");
+        } else {
+            query_params.append_pair("orgUserHasExistingUser", "false");
         }
     }
 
