@@ -352,7 +352,7 @@ pub async fn send_admin_invite(
         org_id.clone(),
         member_id.clone(),
         invited_by_email,
-    );
+    )?;
     let invite_token = encode_jwt(&claims);
     let mut query = url::Url::parse("https://query.builder").unwrap();
     {

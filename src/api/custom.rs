@@ -197,7 +197,7 @@ async fn get_invite_link(_auth: VWApi, org_id: String, email: String, mut conn: 
         org_uuid.clone(),
         membership.uuid.clone(),
         membership.invited_by_email.clone(),
-    );
+    )?;
     let invite_token = encode_jwt(&claims);
 
     // Build the invite URL
@@ -250,7 +250,7 @@ async fn get_user_invite_link(_auth: VWApi, email: String, mut conn: DbConn) -> 
         org_id.clone(),
         member_id.clone(),
         None,
-    );
+    )?;
     let invite_token = encode_jwt(&claims);
 
     // Build the invite URL
